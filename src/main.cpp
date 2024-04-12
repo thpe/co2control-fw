@@ -25,6 +25,20 @@
 #define UART1_RX_PIN 5
 
 
+void modbus_rx_enable() {
+  gpio_put(UART0_DE_PIN, 0);
+  gpio_put(UART0_RE_PIN, 0);
+}
+
+void modbus_all_disable() {
+  gpio_put(UART0_DE_PIN, 0);
+  gpio_put(UART0_RE_PIN, 1);
+}
+
+void modbus_tx_enable() {
+  gpio_put(UART0_RE_PIN, 1);
+  gpio_put(UART0_DE_PIN, 1);
+}
 
 int main() {
 
@@ -34,8 +48,12 @@ int main() {
 //    gpio_set_function(UART0_RX_PIN, GPIO_FUNC_UART);
     stdio_uart_init_full(UART0_ID, UART0_BAUD, UART0_TX_PIN, UART0_RX_PIN);
     printf("REBOOT\r\n");
-    gpio_set_dir(UART0_DE_PIN, GPIO_OUT);
+    gpio_init(UART0_RE_PIN);
     gpio_set_dir(UART0_RE_PIN, GPIO_OUT);
+    gpio_put(UART0_RE_PIN, 1);
+    gpio_init(UART0_DE_PIN);
+    gpio_set_dir(UART0_DE_PIN, GPIO_OUT);
+    gpio_put(UART0_DE_PIN, 1);
 
     adc_init();
     adc_gpio_init(26);
@@ -54,30 +72,37 @@ int main() {
     SCD30<1, UART1_TX_PIN, UART1_RX_PIN> scd;
     scd.init();
 
-    uart_puts(UART0_ID, "UART1 initialised\r\n");
+    printf("UART1 initialised\r\n");
 
 
+    sleep_ms(1000);
+    scd.txReset();
+    scd.check_resp();
+
+    sleep_ms(1000);
     scd.txContStart();
     scd.check_resp();
+    printf("continous measurement startet\r\n");
 
     const float conversion_factor = 3.3f / (1 << 12) * 2.0;
     while (true) {
-        gpio_put(UART0_DE_PIN, 1);
-        gpio_put(UART0_RE_PIN, 0);
         gpio_put(LED1_PIN, 1);
         gpio_put(LED2_PIN, 0);
         scd.txMeas();
         gpio_put(LED1_PIN, 0);
         gpio_put(LED2_PIN, 1);
-        gpio_put(UART0_DE_PIN, 0);
-        gpio_put(UART0_RE_PIN, 1);
         sleep_ms(2000);
         adc_select_input(0);
-        uint16_t result = adc_read();
-        printf("voltage: %f V\n", result * conversion_factor);
+        uint16_t result1 = adc_read();
         adc_select_input(3);
-        result = adc_read();
-        printf("voltage: %f V\n", result * conversion_factor);
-        scd.check_resp();
+        uint16_t result2 = adc_read();
+        modbus_tx_enable();
+        printf("DATA,%f,", result1 * conversion_factor);
+        printf("%f,", result2 * conversion_factor);
+        scd.printMeas(true);
+        printf("\r\n");
+        sleep_ms(10);
+        modbus_rx_enable();
+//        scd.check_resp();
     }
 }

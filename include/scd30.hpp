@@ -28,19 +28,19 @@ template<> unsigned int uart_irq<1> () {return UART1_IRQ;}
 
 uint8_t tx_arr(const uint8_t* ptr, int len) {
 #if 0
-  uart_puts(UART0_ID, "tx: ");
+  printf("tx: ");
   for (int i = 0; i < len; i++) {
     printf("%x,", (int)ptr[i]);
   }
+#endif
   wait_start = 0;
   for (int i = 0; i < len; i++) {
-    uart_putc(UART1_ID, ptr[i]);
-    sleep_us(300);
+    uart_putc(uart1, ptr[i]);
+    sleep_us(200);
   }
-#endif
-  //uart_write_blocking(UART1_ID, ptr, len);
+//  uart_write_blocking(uart1, ptr, len);
 #if 0
-  uart_puts(UART0_ID, "tx END\r\n");
+  printf("tx END\r\n");
 #endif
   return 0;
 }
@@ -50,42 +50,85 @@ public:
   SCD30() {}
 
   int init() {
-    uart_init(uart_id<UART>(), baud);
+    printf("Init SCD30 uart tx: %d, rx: %d, ch: %d\n\r", TX, RX, UART);
     gpio_set_function(TX, GPIO_FUNC_UART);
     gpio_set_function(RX, GPIO_FUNC_UART);
-    uart_set_fifo_enabled(uart_id<UART>(), true);
+    uart_init(uart_id<UART>(), baud);
+    sleep_ms(10);
+    uart_set_fifo_enabled(uart_id<UART>(), false);
+    sleep_ms(10);
     uart_set_hw_flow(uart_id<UART>(), false, false);
+    sleep_ms(10);
 
     // Set our data format
-    uart_set_format(uart_id<UART>(), 8, 1, UART_PARITY_NONE);
+    //uart_set_format(uart_id<UART>(), 8, 1, UART_PARITY_NONE);
 
     // And set up and enable the interrupt hand
+    printf("Init SCD30 uart irq\n\r");
     irq_set_exclusive_handler(uart_irq<UART>(), on_uart_rx);
     irq_set_enabled(uart_irq<UART>(), true);
 
     // Now enable the UART to send interrupts -
     uart_set_irq_enables(uart_id<UART>(), true, false);
+    printf("Init SCD30 done\n\r");
     return 0;
   }
 
+  void txReset() {
+    tx_arr(zero, sizeof(zero));
+    sleep_ms(10);
+    resp_len = sizeof(soft_reset);
+    tx_arr(soft_reset, sizeof(soft_reset));
+    //uart_write_blocking(uart_id<UART>(), soft_reset, sizeof(soft_reset));
+  }
   void txContStart() {
+    tx_arr(zero, sizeof(zero));
+    sleep_ms(10);
     resp_len = sizeof(start_cont);
-    uart_write_blocking(uart_id<UART>(), start_cont, sizeof(start_cont));
+    tx_arr(start_cont, sizeof(start_cont));
+    //uart_write_blocking(uart_id<UART>(), start_cont, sizeof(start_cont));
   }
   void txMeas() {
+    tx_arr(zero, sizeof(zero));
+    sleep_ms(10);
     resp_len = 17;
-    uart_write_blocking(uart_id<UART>(), read_meas, sizeof(read_meas));
+    tx_arr(read_meas, sizeof(read_meas));
+//    uart_write_blocking(uart_id<UART>(), read_meas, sizeof(read_meas));
   }
 
+
+  void printMeas(bool csv = false) {
+    uint32_t co2 = ((uint32_t)raw_buffer[3]) << 24 |
+                   ((uint32_t)raw_buffer[4]) << 16 |
+                   ((uint32_t)raw_buffer[5]) << 8  |
+                   ((uint32_t)raw_buffer[6]);
+    uint32_t temp = ((uint32_t)raw_buffer[7]) << 24 |
+                    ((uint32_t)raw_buffer[8]) << 16 |
+                    ((uint32_t)raw_buffer[9]) << 8  |
+                    ((uint32_t)raw_buffer[10]);
+    uint32_t hum = ((uint32_t)raw_buffer[11]) << 24 |
+                   ((uint32_t)raw_buffer[12]) << 16 |
+                   ((uint32_t)raw_buffer[13]) << 8  |
+                   ((uint32_t)raw_buffer[14]);
+    float co2f = *(float*)&co2;
+    float tempf = *(float*)&temp;
+    float humf = *(float*)&hum;
+    if (csv) {
+      printf("%f,%f,%f", co2f, tempf, humf);
+    } else {
+      printf("CO2: %f, temp %f C, hum %f %%\r\n", co2f, tempf, humf);
+    }
+  }
   static void on_uart_rx() {
     while (uart_is_readable(uart_id<UART>())) {
       tot_chars_rxed++;
       uint8_t ch = uart_getc(uart_id<UART>());
+//      printf("RX %x\r\n", (int)ch);
       if (finished) {
         continue;
       }
       if ((wait_start == 0) && (ch == 0x61)) {
-        //    printf("X%xX\r\n", (int)ch);
+//        printf("X%xX\r\n", (int)ch);
         wait_start = 1;
         chars_rxed = 0;
       }
@@ -96,10 +139,12 @@ public:
       }
 
 
+#if 0
       if (wait_start == 1 && chars_rxed > resp_len) {
         printf("IRQ: rx finished\r\n");
         finished=1;
       }
+#endif
     }
   }
   int check_resp(){
