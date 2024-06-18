@@ -2,7 +2,19 @@
 #include "hardware/uart.h"
 
 
+typedef struct
+{
+  float co2;
+  float temp;
+  float hum;
+  float v_sys;
+  float v_cell;
+} measurement_t;
 
+void print_meas(const measurement_t& meas)
+{
+  printf("DATA,%f,V,%f,V,%f,ppm,%f,C,%f,%%",meas.v_cell, meas.v_sys, meas.co2, meas.temp, meas.hum);
+}
 const uint8_t zero[] =       {0x00};
 const uint8_t start_cont[] = {0x61, 0x06, 0x00, 0x36, 0x00, 0x00, 0x60, 0x64};
 const uint8_t stop_cont[]  = {0x61, 0x06, 0x00, 0x37, 0x00, 0x01, 0xF0, 0x64};
@@ -97,6 +109,27 @@ public:
   }
 
 
+  void getMeas(measurement_t& measurement) {
+    uint32_t co2 = ((uint32_t)raw_buffer[3]) << 24 |
+                   ((uint32_t)raw_buffer[4]) << 16 |
+                   ((uint32_t)raw_buffer[5]) << 8  |
+                   ((uint32_t)raw_buffer[6]);
+    uint32_t temp = ((uint32_t)raw_buffer[7]) << 24 |
+                    ((uint32_t)raw_buffer[8]) << 16 |
+                    ((uint32_t)raw_buffer[9]) << 8  |
+                    ((uint32_t)raw_buffer[10]);
+    uint32_t hum = ((uint32_t)raw_buffer[11]) << 24 |
+                   ((uint32_t)raw_buffer[12]) << 16 |
+                   ((uint32_t)raw_buffer[13]) << 8  |
+                   ((uint32_t)raw_buffer[14]);
+    float co2f = *(float*)&co2;
+    float tempf = *(float*)&temp;
+    float humf = *(float*)&hum;
+
+    measurement.co2 = co2f;
+    measurement.temp = tempf;
+    measurement.hum = humf;
+  }
   void printMeas(bool csv = false) {
     uint32_t co2 = ((uint32_t)raw_buffer[3]) << 24 |
                    ((uint32_t)raw_buffer[4]) << 16 |

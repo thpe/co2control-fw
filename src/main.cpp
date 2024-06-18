@@ -20,6 +20,8 @@
 #define UART0_DE_PIN 2
 #define UART0_RE_PIN 3
 
+#include "modbus.hpp"
+
 // UART1
 #define UART1_ID uart1
 #define UART1_BAUD 19200
@@ -31,14 +33,6 @@
 #define LED2_PIN 21
 #define LED3_PIN 22
 
-typedef struct
-{
-  float co2;
-  float temp;
-  float hum;
-  float v_sys;
-  float v_cell;
-} measurement_t;
 
 queue_t res_queue;
 
@@ -61,24 +55,14 @@ void core1_entry() {
   while(1) {
     queue_remove_blocking(&res_queue, &meas);
     led_toggle(LED0_PIN);
+    modbus_tx_enable();
+    print_meas(meas);
+    printf("\n");
+    sleep_ms(10);
+    modbus_rx_enable();
   }
 }
 
-
-void modbus_rx_enable() {
-  gpio_put(UART0_DE_PIN, 0);
-  gpio_put(UART0_RE_PIN, 0);
-}
-
-void modbus_all_disable() {
-  gpio_put(UART0_DE_PIN, 0);
-  gpio_put(UART0_RE_PIN, 1);
-}
-
-void modbus_tx_enable() {
-  gpio_put(UART0_RE_PIN, 1);
-  gpio_put(UART0_DE_PIN, 1);
-}
 
 int main() {
 
@@ -86,19 +70,13 @@ int main() {
 //    uart_init(UART0_ID, UART0_BAUD);
 //    gpio_set_function(UART0_TX_PIN, GPIO_FUNC_UART);
 //    gpio_set_function(UART0_RX_PIN, GPIO_FUNC_UART);
-    stdio_uart_init_full(UART0_ID, UART0_BAUD, UART0_TX_PIN, UART0_RX_PIN);
-    printf("REBOOT\r\n");
-    gpio_init(UART0_RE_PIN);
-    gpio_set_dir(UART0_RE_PIN, GPIO_OUT);
-    gpio_put(UART0_RE_PIN, 1);
-    gpio_init(UART0_DE_PIN);
-    gpio_set_dir(UART0_DE_PIN, GPIO_OUT);
-    gpio_put(UART0_DE_PIN, 1);
 
     adc_init();
     adc_gpio_init(26);
     adc_gpio_init(29);
 
+    modbus_init();
+    printf("REBOOT\r\n");
 
     gpio_init(LED1_PIN);
     gpio_init(LED2_PIN);
@@ -146,14 +124,14 @@ int main() {
         uint16_t result1 = adc_read();
         adc_select_input(3);
         uint16_t result2 = adc_read();
-        modbus_tx_enable();
-        printf("DATA,%f,", result1 * conversion_factor);
-        printf("%f,", result2 * conversion_factor);
-        scd.printMeas(false);//true);
+//      printf("DATA,%f,", result1 * conversion_factor);
+//      printf("%f,", result2 * conversion_factor);
+//        scd.printMeas(false);//true);
+        scd.getMeas(measurement);
+        measurement.v_cell = result1 * conversion_factor;
+        measurement.v_sys  = result2 * conversion_factor;
         queue_try_add(&res_queue, &measurement);
-        printf("\r\n");
-        sleep_ms(10);
-        modbus_rx_enable();
+//        printf("\r\n");
 //        scd.check_resp();
     }
 }
