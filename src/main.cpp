@@ -7,6 +7,8 @@
 #include "hardware/uart.h"
 #include "hardware/adc.h"
 #include "scd30.hpp"
+#include "pico/util/queue.h"
+#include "pico/multicore.h"
 
 
 // We are using pins 0 and 1, but see the GPIO function select table in the
@@ -24,6 +26,24 @@
 #define UART1_TX_PIN 4
 #define UART1_RX_PIN 5
 
+
+typedef struct
+{
+  float co2;
+  float temp;
+  float hum;
+  float v_sys;
+  float v_cell;
+} measurement_t;
+
+queue_t res_queue;
+
+void core1_entry() {
+  while(1) {
+    measurement_t meas;
+    queue_remove_blocking(&res_queue, &meas);
+  }
+}
 
 void modbus_rx_enable() {
   gpio_put(UART0_DE_PIN, 0);
@@ -67,6 +87,8 @@ int main() {
     gpio_set_dir(LED1_PIN, GPIO_OUT);
     gpio_set_dir(LED2_PIN, GPIO_OUT);
 
+
+    queue_init(&res_queue, sizeof(measurement_t), 2);
 
 
     SCD30<1, UART1_TX_PIN, UART1_RX_PIN> scd;
