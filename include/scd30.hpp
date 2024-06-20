@@ -156,7 +156,6 @@ public:
     while (uart_is_readable(uart_id<UART>())) {
       tot_chars_rxed++;
       uint8_t ch = uart_getc(uart_id<UART>());
-//      printf("RX %x\r\n", (int)ch);
       if (finished) {
         continue;
       }
@@ -165,6 +164,7 @@ public:
         wait_start = 1;
         chars_rxed = 0;
       }
+//      printf("RX %d-%x,", chars_rxed, (int)ch);
 
       raw_buffer[chars_rxed++] = ch;
       if (chars_rxed >= sizeof(raw_buffer)) {
@@ -172,12 +172,10 @@ public:
       }
 
 
-#if 1
       if (wait_start == 1 && chars_rxed >= resp_len) {
-        printf("IRQ: rx finished\r\n");
+//        printf("IRQ: rx finished\r\n");
         finished=1;
       }
-#endif
     }
   }
   int check_resp(){

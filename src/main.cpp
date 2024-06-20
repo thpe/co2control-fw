@@ -59,7 +59,7 @@ void core1_entry() {
     print_meas(meas);
     printf("\n");
     sleep_ms(10);
-    modbus_rx_enable();
+    //modbus_rx_enable();
   }
 }
 
@@ -127,7 +127,7 @@ int main() {
 //      printf("DATA,%f,", result1 * conversion_factor);
 //      printf("%f,", result2 * conversion_factor);
 //        scd.printMeas(false);//true);
-        scd.printStatus();
+        //scd.printStatus();
         sleep_ms(1000);
         scd.getMeas(measurement);
         measurement.v_cell = result1 * conversion_factor;
