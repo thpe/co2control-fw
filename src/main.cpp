@@ -127,6 +127,8 @@ int main() {
 //      printf("DATA,%f,", result1 * conversion_factor);
 //      printf("%f,", result2 * conversion_factor);
 //        scd.printMeas(false);//true);
+        scd.printStatus();
+        sleep_ms(1000);
         scd.getMeas(measurement);
         measurement.v_cell = result1 * conversion_factor;
         measurement.v_sys  = result2 * conversion_factor;

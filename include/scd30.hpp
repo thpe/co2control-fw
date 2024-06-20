@@ -51,12 +51,8 @@ uint8_t tx_arr(const uint8_t* ptr, int len) {
   }
 #endif
   wait_start = 0;
-  finished = 0;
-  for (int i = 0; i < len; i++) {
-    uart_putc(uart1, ptr[i]);
-    sleep_us(200);
-  }
-//  uart_write_blocking(uart1, ptr, len);
+  finished   = 0;
+  uart_write_blocking(uart1, ptr, len);
 #if 0
   printf("tx END\r\n");
 #endif
@@ -96,19 +92,16 @@ public:
     sleep_ms(10);
     resp_len = sizeof(soft_reset);
     tx_arr(soft_reset, sizeof(soft_reset));
-    //uart_write_blocking(uart_id<UART>(), soft_reset, sizeof(soft_reset));
   }
   void txContStart() {
     sleep_ms(10);
     resp_len = sizeof(start_cont);
     tx_arr(start_cont, sizeof(start_cont));
-    //uart_write_blocking(uart_id<UART>(), start_cont, sizeof(start_cont));
   }
   void txMeas() {
     sleep_ms(10);
     resp_len = 17;
     tx_arr(read_meas, sizeof(read_meas));
-//    uart_write_blocking(uart_id<UART>(), read_meas, sizeof(read_meas));
   }
 
 
@@ -155,6 +148,10 @@ public:
       printf("CO2: %f, temp %f C, hum %f %%\r\n", co2f, tempf, humf);
     }
   }
+  void printStatus() {
+    printf("SCD30 status: rx chars %d (%d), finished %d \r\n", chars_rxed, tot_chars_rxed, finished);
+  }
+
   static void on_uart_rx() {
     while (uart_is_readable(uart_id<UART>())) {
       tot_chars_rxed++;
@@ -175,8 +172,8 @@ public:
       }
 
 
-#if 0
-      if (wait_start == 1 && chars_rxed > resp_len) {
+#if 1
+      if (wait_start == 1 && chars_rxed >= resp_len) {
         printf("IRQ: rx finished\r\n");
         finished=1;
       }
