@@ -4,10 +4,15 @@
 
 typedef struct
 {
+  /** CO2 in ppm */
   float co2;
+  /** Temperatur in deg C */
   float temp;
+  /** Relative humidity in % */
   float hum;
+  /** 5 V system voltage measured */
   float v_sys;
+  /** measured cell voltage */
   float v_cell;
 } measurement_t;
 
@@ -46,6 +51,7 @@ uint8_t tx_arr(const uint8_t* ptr, int len) {
   }
 #endif
   wait_start = 0;
+  finished = 0;
   for (int i = 0; i < len; i++) {
     uart_putc(uart1, ptr[i]);
     sleep_us(200);
@@ -87,21 +93,18 @@ public:
   }
 
   void txReset() {
-    tx_arr(zero, sizeof(zero));
     sleep_ms(10);
     resp_len = sizeof(soft_reset);
     tx_arr(soft_reset, sizeof(soft_reset));
     //uart_write_blocking(uart_id<UART>(), soft_reset, sizeof(soft_reset));
   }
   void txContStart() {
-    tx_arr(zero, sizeof(zero));
     sleep_ms(10);
     resp_len = sizeof(start_cont);
     tx_arr(start_cont, sizeof(start_cont));
     //uart_write_blocking(uart_id<UART>(), start_cont, sizeof(start_cont));
   }
   void txMeas() {
-    tx_arr(zero, sizeof(zero));
     sleep_ms(10);
     resp_len = 17;
     tx_arr(read_meas, sizeof(read_meas));
