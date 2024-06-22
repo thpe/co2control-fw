@@ -1,6 +1,6 @@
 #pragma once
 #include "hardware/uart.h"
-
+#include "crc.h"
 
 typedef struct
 {
@@ -178,14 +178,39 @@ public:
       }
     }
   }
+
+  /**
+  ** Check the CRC of the response.
+  **
+  ** \return 1 if CRC is ok, 0 otherwise.
+  */
+  int check_crc() {
+      crc_t crc = crc_init();
+      crc = crc_update(crc, raw_buffer, resp_len);
+      crc = crc_finalize(crc);
+      return crc == 0;
+  }
+
   int check_resp(){
     if (finished) {
+      return check_crc();
+    } else {
+      return 0;
+    }
+  }
+  int print_resp(){
+    if (finished) {
+      crc_t crc = crc_init();
+      crc = crc_update(crc, raw_buffer, resp_len);
+      crc = crc_finalize(crc);
+
       for (int i = 0; i < chars_rxed; i++) {
         printf("%x,", (int)raw_buffer[i]);
       }
       uart_puts(uart_id<UART>(), "\r\n");
       finished= 0;
       chars_rxed = 0;
+      printf("CRC %x\r\n", (int)crc);
       return 1;
     } else {
       printf("not finished %d\r\n", tot_chars_rxed);

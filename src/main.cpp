@@ -33,9 +33,23 @@
 #define LED2_PIN 21
 #define LED3_PIN 22
 
+#define ADC_CELL 0
+#define ADC_SYS 3
 
 queue_t res_queue;
 
+/**
+** Return ADC value in Volt
+**
+** \return a float containing the ADC value.
+*/
+float adc_read_V(int ch)
+{
+   const float conversion_factor = 3.3f / (1 << 12) * 2.0;
+   adc_select_input(ch);
+   uint16_t result = adc_read();
+   return result * conversion_factor;
+}
 uint led_toggle(uint led)
 {
   uint val = gpio_get(led);
@@ -111,7 +125,6 @@ int main() {
     multicore_reset_core1();
     multicore_launch_core1(&core1_entry);
 
-    const float conversion_factor = 3.3f / (1 << 12) * 2.0;
     while (true) {
         gpio_put(LED1_PIN, 1);
         gpio_put(LED2_PIN, 0);
@@ -120,20 +133,18 @@ int main() {
         gpio_put(LED2_PIN, 1);
         led_toggle(LED3_PIN);
         sleep_ms(2000);
-        adc_select_input(0);
-        uint16_t result1 = adc_read();
-        adc_select_input(3);
-        uint16_t result2 = adc_read();
 //      printf("DATA,%f,", result1 * conversion_factor);
 //      printf("%f,", result2 * conversion_factor);
 //        scd.printMeas(false);//true);
         //scd.printStatus();
-        sleep_ms(1000);
-        scd.getMeas(measurement);
-        measurement.v_cell = result1 * conversion_factor;
-        measurement.v_sys  = result2 * conversion_factor;
-        queue_try_add(&res_queue, &measurement);
+        if (scd.check_resp()) {
+          scd.getMeas(measurement);
+          measurement.v_cell = adc_read_V(ADC_CELL);
+          measurement.v_sys  = adc_read_V(ADC_SYS);
+          queue_try_add(&res_queue, &measurement);
+        }
 //        printf("\r\n");
 //        scd.check_resp();
     }
 }
+

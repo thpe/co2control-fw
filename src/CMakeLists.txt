@@ -1,5 +1,6 @@
 add_executable(main
         main.cpp
+        crc.c
         )
 
 # pull in common dependencies
