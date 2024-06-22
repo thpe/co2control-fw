@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
+set(PICO_SDK_FETCH_FROM_GIT on)
 # Pull in SDK (must be before project)
 include(pico_sdk_import.cmake)
 
