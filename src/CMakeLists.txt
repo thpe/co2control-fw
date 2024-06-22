@@ -1,9 +1,10 @@
 add_executable(main
         main.cpp
+        crc.c
         )
 
 # pull in common dependencies
-target_link_libraries(main pico_stdlib hardware_adc)
+target_link_libraries(main pico_stdlib hardware_adc pico_multicore)
 
 # create map/bin/hex file etc.
 pico_add_extra_outputs(main)
