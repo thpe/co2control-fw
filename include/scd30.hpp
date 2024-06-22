@@ -43,21 +43,6 @@ template< int ID > unsigned int uart_irq();
 template<> unsigned int uart_irq<0> () {return UART0_IRQ;}
 template<> unsigned int uart_irq<1> () {return UART1_IRQ;}
 
-uint8_t tx_arr(const uint8_t* ptr, int len) {
-#if 0
-  printf("tx: ");
-  for (int i = 0; i < len; i++) {
-    printf("%x,", (int)ptr[i]);
-  }
-#endif
-  wait_start = 0;
-  finished   = 0;
-  uart_write_blocking(uart1, ptr, len);
-#if 0
-  printf("tx END\r\n");
-#endif
-  return 0;
-}
 template< int UART, int TX, int RX >
 class SCD30 {
 public:
@@ -222,5 +207,11 @@ public:
     }
   }
 private:
+  uint8_t tx_arr(const uint8_t* ptr, int len) {
+    wait_start = 0;
+    finished   = 0;
+    uart_write_blocking(uart_id<UART>(), ptr, len);
+    return 0;
+  }
   static constexpr int baud = 19200;
 };
