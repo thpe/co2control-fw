@@ -1,25 +1,9 @@
 #pragma once
+
 #include "hardware/uart.h"
 #include "crc.h"
+#include "measurement.hpp"
 
-typedef struct
-{
-  /** CO2 in ppm */
-  float co2;
-  /** Temperatur in deg C */
-  float temp;
-  /** Relative humidity in % */
-  float hum;
-  /** 5 V system voltage measured */
-  float v_sys;
-  /** measured cell voltage */
-  float v_cell;
-} measurement_t;
-
-void print_meas(const measurement_t& meas)
-{
-  printf("DATA,%f,V,%f,V,%f,ppm,%f,C,%f,%%",meas.v_cell, meas.v_sys, meas.co2, meas.temp, meas.hum);
-}
 
 const uint8_t start_cont[] = {0x61, 0x06, 0x00, 0x36, 0x00, 0x00, 0x60, 0x64};
 const uint8_t stop_cont[]  = {0x61, 0x06, 0x00, 0x37, 0x00, 0x01, 0xF0, 0x64};
@@ -49,84 +33,84 @@ public:
   SCD30() {}
 
   int init() {
-    printf("Init SCD30 uart tx: %d, rx: %d, ch: %d\n\r", TX, RX, UART);
     gpio_set_function(TX, GPIO_FUNC_UART);
     gpio_set_function(RX, GPIO_FUNC_UART);
     uart_init(uart_id<UART>(), baud);
-    sleep_ms(10);
     uart_set_fifo_enabled(uart_id<UART>(), false);
-    sleep_ms(10);
     uart_set_hw_flow(uart_id<UART>(), false, false);
-    sleep_ms(10);
 
     // Set our data format
     //uart_set_format(uart_id<UART>(), 8, 1, UART_PARITY_NONE);
 
     // And set up and enable the interrupt hand
-    printf("Init SCD30 uart irq\n\r");
     irq_set_exclusive_handler(uart_irq<UART>(), on_uart_rx);
     irq_set_enabled(uart_irq<UART>(), true);
 
     // Now enable the UART to send interrupts -
     uart_set_irq_enables(uart_id<UART>(), true, false);
-    printf("Init SCD30 done\n\r");
     return 0;
   }
 
   void txReset() {
-    sleep_ms(10);
     resp_len = sizeof(soft_reset);
-    tx_arr(soft_reset, sizeof(soft_reset));
-  }
-  void txContStart() {
-    sleep_ms(10);
-    resp_len = sizeof(start_cont);
-    tx_arr(start_cont, sizeof(start_cont));
-  }
-  void txMeas() {
-    sleep_ms(10);
-    resp_len = 17;
-    tx_arr(read_meas, sizeof(read_meas));
+    wait_start = 0;
+    finished   = 0;
+    tx_arr_crc(uart_id<UART>(), soft_reset, sizeof(soft_reset)-2);
   }
 
+  void txContStart() {
+    resp_len = sizeof(start_cont);
+    wait_start = 0;
+    finished   = 0;
+    tx_arr_crc(uart_id<UART>(), start_cont, sizeof(start_cont)-2);
+  }
+
+  /**
+  ** Send measurement request.
+  */
+  void txMeas() {
+    wait_start = 0;
+    finished   = 0;
+    resp_len = readMultipleHoldingRegister(uart_id<UART>(), 0x61, 0x28, 0x06);
+  }
+
+
+  float getCO2 () {
+    uint32_t co2 = ((uint32_t)raw_buffer[3]) << 24 |
+                   ((uint32_t)raw_buffer[4]) << 16 |
+                   ((uint32_t)raw_buffer[5]) << 8  |
+                   ((uint32_t)raw_buffer[6]);
+    float co2f = *(float*)&co2;
+    return co2f;
+  }
+
+  float getTemp() {
+    uint32_t temp = ((uint32_t)raw_buffer[7]) << 24 |
+                    ((uint32_t)raw_buffer[8]) << 16 |
+                    ((uint32_t)raw_buffer[9]) << 8  |
+                    ((uint32_t)raw_buffer[10]);
+    float tempf = *(float*)&temp;
+    return tempf;
+  }
+
+  float getHum() {
+    uint32_t hum = ((uint32_t)raw_buffer[11]) << 24 |
+                   ((uint32_t)raw_buffer[12]) << 16 |
+                   ((uint32_t)raw_buffer[13]) << 8  |
+                   ((uint32_t)raw_buffer[14]);
+    float humf = *(float*)&hum;
+    return humf;
+  }
 
   void getMeas(measurement_t& measurement) {
-    uint32_t co2 = ((uint32_t)raw_buffer[3]) << 24 |
-                   ((uint32_t)raw_buffer[4]) << 16 |
-                   ((uint32_t)raw_buffer[5]) << 8  |
-                   ((uint32_t)raw_buffer[6]);
-    uint32_t temp = ((uint32_t)raw_buffer[7]) << 24 |
-                    ((uint32_t)raw_buffer[8]) << 16 |
-                    ((uint32_t)raw_buffer[9]) << 8  |
-                    ((uint32_t)raw_buffer[10]);
-    uint32_t hum = ((uint32_t)raw_buffer[11]) << 24 |
-                   ((uint32_t)raw_buffer[12]) << 16 |
-                   ((uint32_t)raw_buffer[13]) << 8  |
-                   ((uint32_t)raw_buffer[14]);
-    float co2f = *(float*)&co2;
-    float tempf = *(float*)&temp;
-    float humf = *(float*)&hum;
-
-    measurement.co2 = co2f;
-    measurement.temp = tempf;
-    measurement.hum = humf;
+    measurement.co2  = getCO2();
+    measurement.temp = getTemp();
+    measurement.hum  = getHum();
   }
   void printMeas(bool csv = false) {
-    uint32_t co2 = ((uint32_t)raw_buffer[3]) << 24 |
-                   ((uint32_t)raw_buffer[4]) << 16 |
-                   ((uint32_t)raw_buffer[5]) << 8  |
-                   ((uint32_t)raw_buffer[6]);
-    uint32_t temp = ((uint32_t)raw_buffer[7]) << 24 |
-                    ((uint32_t)raw_buffer[8]) << 16 |
-                    ((uint32_t)raw_buffer[9]) << 8  |
-                    ((uint32_t)raw_buffer[10]);
-    uint32_t hum = ((uint32_t)raw_buffer[11]) << 24 |
-                   ((uint32_t)raw_buffer[12]) << 16 |
-                   ((uint32_t)raw_buffer[13]) << 8  |
-                   ((uint32_t)raw_buffer[14]);
-    float co2f = *(float*)&co2;
-    float tempf = *(float*)&temp;
-    float humf = *(float*)&hum;
+    float co2f  = getCO2();
+    float tempf = getTemp();
+    float humf  = getHum();
     if (csv) {
       printf("%f,%f,%f", co2f, tempf, humf);
     } else {
@@ -176,23 +160,23 @@ public:
       return crc == 0;
   }
 
-  int check_resp(){
+  int check_resp() {
     if (finished) {
       return check_crc();
     } else {
       return 0;
     }
   }
-  int print_resp(){
+  int print_resp() {
     if (finished) {
-      crc_t crc = crc_init();
-      crc = crc_update(crc, raw_buffer, resp_len);
-      crc = crc_finalize(crc);
+      crc_t crc = crc_init ();
+      crc = crc_update (crc, raw_buffer, resp_len);
+      crc = crc_finalize (crc);
 
       for (int i = 0; i < chars_rxed; i++) {
         printf("%x,", (int)raw_buffer[i]);
       }
-      uart_puts(uart_id<UART>(), "\r\n");
+      printf("\r\n");
       finished= 0;
       chars_rxed = 0;
       printf("CRC %x\r\n", (int)crc);
@@ -202,16 +186,20 @@ public:
       for (int i = 0; i < chars_rxed; i++) {
         printf("%x,", (int)raw_buffer[i]);
       }
-      uart_puts(uart_id<UART>(), "\r\n");
+      printf("\r\n");
       return 0;
     }
   }
 private:
-  uint8_t tx_arr(const uint8_t* ptr, int len) {
-    wait_start = 0;
-    finished   = 0;
-    uart_write_blocking(uart_id<UART>(), ptr, len);
-    return 0;
+
+
+  uint8_t msb(uint16_t data)
+  {
+    return (data >> 8) & 0xFF;
+  }
+  uint8_t lsb(uint16_t data)
+  {
+    return data & 0xFF;
   }
   static constexpr int baud = 19200;
 };
