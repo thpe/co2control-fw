@@ -4,6 +4,10 @@
 #include "crc.h"
 #include "measurement.hpp"
 
+/** Inter-character timeout in us */
+#define MODBUS_INTERCHAR_TIMEOUT 750
+/** Inter-frame delay in us */
+#define MODBUS_INTERFRAME_DELAY 1750
 
 const uint8_t start_cont[] = {0x61, 0x06, 0x00, 0x36, 0x00, 0x00, 0x60, 0x64};
 const uint8_t stop_cont[]  = {0x61, 0x06, 0x00, 0x37, 0x00, 0x01, 0xF0, 0x64};
@@ -18,6 +22,19 @@ int chars_rxed = 0;
 int tot_chars_rxed = 0;
 int finished = 0;
 int wait_start = 0;
+absolute_time_t last_rx;
+int timeout = 0;
+void clear_state()
+{
+  chars_rxed = 0;
+  finished   = 0;
+  wait_start = 0;
+  timeout    = 0;
+}
+void on_timeout(unsigned int alarm_num) {
+  timeout = 1;
+}
+constexpr int alarm_scd30 = 0;
 
 template< int ID > uart_inst_t* uart_id();
 template<> uart_inst_t* uart_id<0> () {return uart0;}
@@ -39,6 +56,9 @@ public:
     uart_set_fifo_enabled(uart_id<UART>(), false);
     uart_set_hw_flow(uart_id<UART>(), false, false);
 
+    hardware_alarm_claim(alarm_scd30);
+    hardware_alarm_set_callback(alarm_scd30, &on_timeout);
+
     // Set our data format
     //uart_set_format(uart_id<UART>(), 8, 1, UART_PARITY_NONE);
 
@@ -53,15 +73,13 @@ public:
 
   void txReset() {
     resp_len = sizeof(soft_reset);
-    wait_start = 0;
-    finished   = 0;
+    clear_state();
     tx_arr_crc(uart_id<UART>(), soft_reset, sizeof(soft_reset)-2);
   }
 
   void txContStart() {
     resp_len = sizeof(start_cont);
-    wait_start = 0;
-    finished   = 0;
+    clear_state();
     tx_arr_crc(uart_id<UART>(), start_cont, sizeof(start_cont)-2);
   }
 
@@ -69,8 +87,7 @@ public:
   ** Send measurement request.
   */
   void txMeas() {
-    wait_start = 0;
-    finished   = 0;
+    clear_state();
     resp_len = readMultipleHoldingRegister(uart_id<UART>(), 0x61, 0x28, 0x06);
   }
 
@@ -121,6 +138,9 @@ public:
     printf("SCD30 status: rx chars %d (%d), finished %d \r\n", chars_rxed, tot_chars_rxed, finished);
   }
 
+  /**
+  ** Callback for one byte.
+  */
   static void on_uart_rx() {
     while (uart_is_readable(uart_id<UART>())) {
       tot_chars_rxed++;
@@ -146,7 +166,11 @@ public:
         finished=1;
       }
     }
+    last_rx = get_absolute_time();
+    absolute_time_t to = delayed_by_us(last_rx, MODBUS_INTERFRAME_DELAY);
+    hardware_alarm_set_target(alarm_scd30, to);
   }
+
 
   /**
   ** Check the CRC of the response.
@@ -161,7 +185,7 @@ public:
   }
 
   int check_resp() {
-    if (finished) {
+    if (finished && timeout) {
       return check_crc();
     } else {
       return 0;
@@ -193,13 +217,5 @@ public:
 private:
 
 
-  uint8_t msb(uint16_t data)
-  {
-    return (data >> 8) & 0xFF;
-  }
-  uint8_t lsb(uint16_t data)
-  {
-    return data & 0xFF;
-  }
   static constexpr int baud = 19200;
 };

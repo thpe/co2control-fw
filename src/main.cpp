@@ -142,8 +142,10 @@ int main() {
           measurement.v_cell = adc_read_V(ADC_CELL);
           measurement.v_sys  = adc_read_V(ADC_SYS);
           queue_try_add(&res_queue, &measurement);
+        } else {
+          printf("ERROR\r\n");
+          scd.printStatus();
         }
-//        printf("\r\n");
 //        scd.check_resp();
     }
 }
