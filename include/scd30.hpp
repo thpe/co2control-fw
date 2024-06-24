@@ -25,12 +25,14 @@ int finished = 0;
 int wait_start = 0;
 absolute_time_t last_rx;
 int timeout = 0;
+crc_t crc;
 void clear_state()
 {
   chars_rxed = 0;
   finished   = 0;
   wait_start = 0;
   timeout    = 0;
+  crc        = crc_init();
 }
 void on_timeout(unsigned int alarm_num) {
   timeout = 1;
@@ -148,6 +150,7 @@ public:
       }
 //      printf("RX %d-%x,", chars_rxed, (int)ch);
 
+      crc = crc_update(crc, &ch, 1);
       raw_buffer[chars_rxed++] = ch;
       if (chars_rxed >= sizeof(raw_buffer)) {
         chars_rxed = 0;
@@ -156,6 +159,7 @@ public:
 
       if (wait_start == 1 && chars_rxed >= resp_len) {
 //        printf("IRQ: rx finished\r\n");
+        crc = crc_finalize(crc);
         finished=1;
       }
     }
@@ -171,9 +175,6 @@ public:
   ** \return 1 if CRC is ok, 0 otherwise.
   */
   int check_crc() {
-      crc_t crc = crc_init();
-      crc = crc_update(crc, raw_buffer, resp_len);
-      crc = crc_finalize(crc);
       return crc == 0;
   }
 
@@ -186,9 +187,6 @@ public:
   }
   int print_resp() {
     if (finished) {
-      crc_t crc = crc_init ();
-      crc = crc_update (crc, raw_buffer, resp_len);
-      crc = crc_finalize (crc);
 
       for (int i = 0; i < chars_rxed; i++) {
         printf("%x,", (int)raw_buffer[i]);
