@@ -13,11 +13,12 @@
 
 #include "led.hpp"
 #include "adc.hpp"
+#include "modbusslave.hpp"
 
 // We are using pins 0 and 1, but see the GPIO function select table in the
 // datasheet for information on which other pins can be used.
 #define UART0_ID uart0
-#define UART0_BAUD 115200
+#define UART0_BAUD 19200
 #define UART0_TX_PIN 0
 #define UART0_RX_PIN 1
 #define UART0_DE_PIN 2
@@ -47,10 +48,11 @@ void core1_entry() {
     led_toggle(LED0_PIN);
     modbus_tx_enable();
     print_meas(meas);
-    printf("\n");
-    sleep_ms(10);
+    printf("\r\n");
+    printf("\r\n");
+    sleep_ms(20);
     watchdog_update();
-    //modbus_rx_enable();
+    modbus_rx_enable();
   }
 }
 
