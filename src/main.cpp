@@ -4,12 +4,15 @@
 
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "hardware/uart.h"
 #include "hardware/adc.h"
+#include "hardware/uart.h"
+#include "hardware/watchdog.h"
 #include "scd30.hpp"
 #include "pico/util/queue.h"
 #include "pico/multicore.h"
 
+#include "led.hpp"
+#include "adc.hpp"
 
 // We are using pins 0 and 1, but see the GPIO function select table in the
 // datasheet for information on which other pins can be used.
@@ -28,39 +31,12 @@
 #define UART1_TX_PIN 4
 #define UART1_RX_PIN 5
 
-#define LED0_PIN 19
-#define LED1_PIN 20
-#define LED2_PIN 21
-#define LED3_PIN 22
-
-#define ADC_CELL 0
-#define ADC_SYS 3
 
 queue_t res_queue;
 
-/**
-** Return ADC value in Volt
-**
-** \return a float containing the ADC value.
-*/
-float adc_read_V(int ch)
-{
-   const float conversion_factor = 3.3f / (1 << 12) * 2.0;
-   adc_select_input(ch);
-   uint16_t result = adc_read();
-   return result * conversion_factor;
-}
-uint led_toggle(uint led)
-{
-  uint val = gpio_get(led);
-  val = (~val & 0x1);
-  gpio_put(led, val);
-  return val;
-}
-
 void core1_entry() {
-  gpio_init(LED0_PIN);
-  gpio_set_dir(LED0_PIN, GPIO_OUT);
+  watchdog_enable(5000,1);
+  led_init(LED0_PIN);
   printf("booting core 1\r\n");
   gpio_put(LED0_PIN, 1);
   sleep_ms(1000);
@@ -73,17 +49,13 @@ void core1_entry() {
     print_meas(meas);
     printf("\n");
     sleep_ms(10);
+    watchdog_update();
     //modbus_rx_enable();
   }
 }
 
 
 int main() {
-
-//    stdio_init_all();
-//    uart_init(UART0_ID, UART0_BAUD);
-//    gpio_set_function(UART0_TX_PIN, GPIO_FUNC_UART);
-//    gpio_set_function(UART0_RX_PIN, GPIO_FUNC_UART);
 
     adc_init();
     adc_gpio_init(26);
@@ -92,12 +64,9 @@ int main() {
     modbus_init();
     printf("REBOOT\r\n");
 
-    gpio_init(LED1_PIN);
-    gpio_init(LED2_PIN);
-    gpio_init(LED3_PIN);
-    gpio_set_dir(LED1_PIN, GPIO_OUT);
-    gpio_set_dir(LED2_PIN, GPIO_OUT);
-    gpio_set_dir(LED3_PIN, GPIO_OUT);
+    led_init(LED1_PIN);
+    led_init(LED2_PIN);
+    led_init(LED3_PIN);
 
 
 
@@ -126,15 +95,12 @@ int main() {
     multicore_launch_core1(&core1_entry);
 
     while (true) {
+        led_toggle(LED2_PIN);
         gpio_put(LED1_PIN, 1);
-        gpio_put(LED2_PIN, 0);
         scd.txMeas();
         gpio_put(LED1_PIN, 0);
-        gpio_put(LED2_PIN, 1);
         led_toggle(LED3_PIN);
         sleep_ms(2000);
-//      printf("DATA,%f,", result1 * conversion_factor);
-//      printf("%f,", result2 * conversion_factor);
 //        scd.printMeas(false);//true);
         //scd.printStatus();
         if (scd.check_resp()) {
@@ -146,7 +112,6 @@ int main() {
           printf("ERROR\r\n");
           scd.printStatus();
         }
-//        scd.check_resp();
     }
 }
 
