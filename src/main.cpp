@@ -36,23 +36,34 @@
 queue_t res_queue;
 
 void core1_entry() {
+  gpio_put(LED3_PIN, 1);
   watchdog_enable(5000,1);
   led_init(LED0_PIN);
-  printf("booting core 1\r\n");
   gpio_put(LED0_PIN, 1);
   sleep_ms(1000);
   gpio_put(LED0_PIN, 0);
   measurement_t meas;
+  MODBUSSlave::Slave< 0, UART0_TX_PIN, UART0_RX_PIN, UART0_DE_PIN, UART0_RE_PIN> slave;
+  slave.init();
+  slave.clear();
+  gpio_put(LED3_PIN, 0);
+  uint8_t reg[16];
+  for (int i = 0; i < 16; i++) {
+    reg[i] = 0;
+  }
   while(1) {
-    queue_remove_blocking(&res_queue, &meas);
-    led_toggle(LED0_PIN);
-    modbus_tx_enable();
-    print_meas(meas);
-    printf("\r\n");
-    printf("\r\n");
-    sleep_ms(20);
-    watchdog_update();
-    modbus_rx_enable();
+    if(queue_try_remove(&res_queue, &meas)) {
+       led_toggle(LED1_PIN);
+//      print_meas(meas);
+      watchdog_update();
+    }
+    MODBUSSlave::Request r;
+    if (queue_try_remove(&MODBUSSlave::request_queue, &r)) {
+      gpio_put(LED0_PIN, 1);
+      slave.clear();
+      slave.send_holding(r.func, r.size * 2, reg);
+      gpio_put(LED0_PIN, 0);
+    }
   }
 }
 
@@ -63,8 +74,7 @@ int main() {
     adc_gpio_init(26);
     adc_gpio_init(29);
 
-    modbus_init();
-    printf("REBOOT\r\n");
+  //  modbus_init();
 
     led_init(LED1_PIN);
     led_init(LED2_PIN);
@@ -78,7 +88,6 @@ int main() {
     scd.init();
     gpio_put(LED1_PIN, 1);
 
-    printf("UART1 initialised\r\n");
 
 
     sleep_ms(1000);
@@ -89,19 +98,15 @@ int main() {
     sleep_ms(1000);
     scd.txContStart();
     scd.check_resp();
-    printf("continous measurement startet\r\n");
-    gpio_put(LED3_PIN, 1);
 
     measurement_t measurement;
     multicore_reset_core1();
     multicore_launch_core1(&core1_entry);
 
     while (true) {
-        led_toggle(LED2_PIN);
-        gpio_put(LED1_PIN, 1);
+        gpio_put(LED2_PIN, 1);
         scd.txMeas();
-        gpio_put(LED1_PIN, 0);
-        led_toggle(LED3_PIN);
+        gpio_put(LED2_PIN, 0);
         sleep_ms(2000);
 //        scd.printMeas(false);//true);
         //scd.printStatus();
@@ -111,8 +116,7 @@ int main() {
           measurement.v_sys  = adc_read_V(ADC_SYS);
           queue_try_add(&res_queue, &measurement);
         } else {
-          printf("ERROR\r\n");
-          scd.printStatus();
+          //scd.printStatus();
         }
     }
 }

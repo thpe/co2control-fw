@@ -49,7 +49,7 @@ void on_modbus_timeout(unsigned int alarm_num) {
 }
 constexpr int alarm_modbusslave = 1;
 
-template< int UART, int TX, int RX, int TXEN, int RXEN >
+template< int UART, int TX, int RX, int DE, int RE >
 class Slave {
 public:
   Slave() {}
@@ -59,42 +59,69 @@ public:
     gpio_set_function(TX, GPIO_FUNC_UART);
     gpio_set_function(RX, GPIO_FUNC_UART);
     uart_init(uart_id<UART>(), baud);
-    uart_set_fifo_enabled(uart_id<UART>(), false);
-    uart_set_hw_flow(uart_id<UART>(), false, false);
+
+    gpio_init(RE);
+    gpio_set_dir(RE, GPIO_OUT);
+    gpio_init(DE);
+    gpio_set_dir(DE, GPIO_OUT);
+    rx_enable();
 
     hardware_alarm_claim(alarm_modbusslave);
-    hardware_alarm_set_callback(alarm_modbusslave, &on_timeout);
+    hardware_alarm_set_callback(alarm_modbusslave, &on_modbus_timeout);
 
     // Set our data format
     //uart_set_format(uart_id<UART>(), 8, 1, UART_PARITY_NONE);
 
     // And set up and enable the interrupt hand
-    irq_set_exclusive_handler(uart_irq<UART>(), on_uart_rx);
+    irq_set_exclusive_handler(uart_irq<UART>(), on_slave_rx);
     irq_set_enabled(uart_irq<UART>(), true);
 
     // Now enable the UART to send interrupts -
     uart_set_irq_enables(uart_id<UART>(), true, false);
+    rx_enable();
     return 0;
+  }
+  /**
+  ** Enable RX on transceiver.
+  */
+  void rx_enable() {
+    gpio_put(DE, 0);
+    gpio_put(RE, 0);
+  }
+
+  /**
+  ** Disable transceiver.
+  */
+  void all_disable() {
+    gpio_put(DE, 0);
+    gpio_put(RE, 1);
+  }
+
+  /**
+  ** Enable TX on transceiver.
+  */
+  void tx_enable() {
+    gpio_put(RE, 1);
+    gpio_put(DE, 1);
   }
 
 
   /**
   ** Callback for one byte.
   */
-  static void on_uart_rx() {
+  static void on_slave_rx() {
+    led_toggle(LED3_PIN);
     while (uart_is_readable(uart_id<UART>())) {
       tot_chars_rxed++;
       uint8_t ch = uart_getc(uart_id<UART>());
       if (finished) {
         continue;
       }
-      if ((wait_start == 0) && (ch == 0x61)) {
-//        printf("X%xX\r\n", (int)ch);
+      if ((wait_start == 0) && (ch == 0x42)) {
         wait_start = 1;
         chars_rxed = 0;
         crc = crc_init();
       }
-//      printf("RX %d-%x,", chars_rxed, (int)ch);
 
       raw_buffer[chars_rxed++] = ch;
       crc = crc_update(crc, &ch, 1);
@@ -104,17 +131,33 @@ public:
       }
 
 
-      if (wait_start == 1 && chars_rxed >= resp_len) {
+      if (wait_start == 1 && chars_rxed >= 8) {
         crc = crc_finalize(crc);
         finished=1;
+        Request r = {0x42, (function_code)raw_buffer[1], (uint16_t)(raw_buffer[2] << 8 | raw_buffer[3])};
+        queue_try_add(&request_queue, &r);
       }
     }
     last_rx = get_absolute_time();
     absolute_time_t to = delayed_by_us(last_rx, MODBUS_INTERFRAME_DELAY);
-    hardware_alarm_set_target(alarm_scd30, to);
+    hardware_alarm_set_target(alarm_modbusslave, to);
   }
 
 
+  int send_holding(uint8_t func, uint8_t size, uint8_t* data)
+  {
+    tx_enable();
+    sleep_ms(20);
+    uint8_t d[32] = {0x42, func};
+    for (int i = 0; i < size; i++) {
+      d[i+3] = data[i];
+    }
+
+    tx_arr_crc(uart_id<UART>(), d, size+3);
+    sleep_ms(20);
+    rx_enable();
+    return 1;
+  }
   /**
   ** Check the CRC of the response.
   **
@@ -123,7 +166,17 @@ public:
   int check_crc() {
       return crc == 0;
   }
+  int check_resp() {
+    if (finished && timeout) {
+      return check_crc();
+    } else {
+      return 0;
+    }
+  }
 
+  void clear() {
+    clear_state();
+  }
 private:
 
 

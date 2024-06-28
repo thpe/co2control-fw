@@ -59,15 +59,6 @@ uint8_t tx_arr_crc(uart_inst_t* uartid, const uint8_t* ptr, int len) {
   crc = crc_update (crc, ptr, len);
   crc = crc_finalize(crc);
 
-#if 0
-  for (int i = 0; i < len; i++) {
-    printf("%x,", (int)ptr[i]);
-  }
-  printf("%x,", crc & 0xFF);
-  printf("%x,", (crc >> 8) & 0xFF);
-  printf("\r\n");
-#endif
-
   uart_write_blocking(uartid, ptr, len);
   uart_putc(uartid, lsb(crc));
   uart_putc(uartid, msb(crc));
