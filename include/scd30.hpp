@@ -144,11 +144,9 @@ public:
         continue;
       }
       if ((wait_start == 0) && (ch == 0x61)) {
-//        printf("X%xX\r\n", (int)ch);
         wait_start = 1;
         chars_rxed = 0;
       }
-//      printf("RX %d-%x,", chars_rxed, (int)ch);
 
       crc = crc_update(crc, &ch, 1);
       raw_buffer[chars_rxed++] = ch;
@@ -158,7 +156,6 @@ public:
 
 
       if (wait_start == 1 && chars_rxed >= resp_len) {
-//        printf("IRQ: rx finished\r\n");
         crc = crc_finalize(crc);
         finished=1;
       }
