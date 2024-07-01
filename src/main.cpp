@@ -33,6 +33,11 @@
 #define UART1_RX_PIN 5
 
 
+uint16_t hton(uint16_t val)
+{
+  return (val & 0xFF) << 8 | (val & 0xFF00) >> 8;
+}
+
 queue_t res_queue;
 
 void core1_entry() {
@@ -47,21 +52,30 @@ void core1_entry() {
   slave.init();
   slave.clear();
   gpio_put(LED3_PIN, 0);
-  uint8_t reg[16];
-  for (int i = 0; i < 16; i++) {
+  uint16_t reg[32];
+  for (int i = 0; i < 32; i++) {
     reg[i] = 0;
   }
   while(1) {
     if(queue_try_remove(&res_queue, &meas)) {
        led_toggle(LED1_PIN);
+       reg[0x10] = hton(meas.co2);
+       reg[0x11] = hton(meas.temp*10);
+       reg[0x12] = hton(meas.hum);
+       reg[0x13] = hton(meas.v_sys * 1000);
+       reg[0x14] = hton(meas.v_cell * 1000);
 //      print_meas(meas);
       watchdog_update();
     }
     MODBUSSlave::Request r;
     if (queue_try_remove(&MODBUSSlave::request_queue, &r)) {
       gpio_put(LED0_PIN, 1);
+      sleep_ms(1);
       slave.clear();
-      slave.send_holding(r.func, r.size * 2, reg);
+      if (r.size > 15) {
+        r.size = 15;
+      }
+      slave.send_holding(r.func, r.size*2, (uint8_t*)(reg+r.start));
       gpio_put(LED0_PIN, 0);
     }
   }

@@ -54,6 +54,16 @@ uint8_t lsb(uint16_t data)
 }
 
 
+uint8_t tx_arr_crc2(uart_inst_t* uartid, const uint8_t* ptr, int len) {
+  crc_t crc = crc_init ();
+  crc = crc_update (crc, ptr, len);
+  crc = crc_finalize(crc);
+
+  uart_write_blocking(uartid, ptr, len);
+  uart_putc(uartid, msb(crc));
+  uart_putc(uartid, lsb(crc));
+  return 0;
+}
 uint8_t tx_arr_crc(uart_inst_t* uartid, const uint8_t* ptr, int len) {
   crc_t crc = crc_init ();
   crc = crc_update (crc, ptr, len);

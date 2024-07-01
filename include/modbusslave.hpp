@@ -33,6 +33,7 @@ class Request {
 public:
   uint16_t addr;
   function_code func;
+  uint16_t start;
   uint16_t size;
 };
 queue_t request_queue;
@@ -134,7 +135,11 @@ public:
       if (wait_start == 1 && chars_rxed >= 8) {
         crc = crc_finalize(crc);
         finished=1;
-        Request r = {0x42, (function_code)raw_buffer[1], (uint16_t)(raw_buffer[2] << 8 | raw_buffer[3])};
+        uint8_t dev_addr = raw_buffer[0];
+        function_code fc = (function_code)raw_buffer[1];
+        uint16_t start = (raw_buffer[2] << 8 | raw_buffer[3]);
+        uint16_t size =  (raw_buffer[4] << 8 | raw_buffer[5]);
+        Request r = {dev_addr, fc, start, size};
         queue_try_add(&request_queue, &r);
       }
     }
@@ -147,8 +152,7 @@ public:
   int send_holding(uint8_t func, uint8_t size, uint8_t* data)
   {
     tx_enable();
-    sleep_ms(20);
-    uint8_t d[32] = {0x42, func};
+    uint8_t d[32] = {0x42, func, size};
     for (int i = 0; i < size; i++) {
       d[i+3] = data[i];
     }
